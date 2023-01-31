@@ -10,7 +10,7 @@ parameters:
   image-name:
     description: slimpsv/orb-demo:fresh
     type: string
-    default: sreejithfocaloid/node-example:latest #update
+    default: slimpsv/orb-demo:fresh #update
   image-connector:
     description: dockerhub.public
     type: string
