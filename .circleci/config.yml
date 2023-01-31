@@ -1,7 +1,6 @@
-# Use the latest 2.1 version of CircleCI pipeline process engine.
-# See: https://circleci.com/docs/2.0/configuration-reference
 version: 2.1
 
+# add orbs including the slimdevops/slim-ai-test-orb@0.0.16
 orbs:
   docker: circleci/docker@1.5.0
   slim-ai-test-orb: slimdevops/slim-ai-test-orb@0.0.16
@@ -10,32 +9,34 @@ parameters:
   image-name:
     description: slimpsv/orb-demo:fresh
     type: string
-    default: slimpsv/orb-demo:fresh #update
+    # Add your container image here
+    default: slimpsv/orb-demo:fresh 
   image-connector:
     description: dockerhub.public
     type: string
-    default: dockerhub.public #Connector used by slim to get the image eg:dockerhub.public
+    #Connector used by slim to get the image eg:dockerhub.public
+    default: dockerhub.public 
   cimg-tag:
     description: Which tag to be used for cimg/base.
     type: string
-    default: current #Which tag to be used for cimg eg:  cimg/base:current
+    # Which tag to be used for default circleci base image (cimg):  cimg/base:current
+    default: current 
 
 executors:
   docker-publisher: 
     environment:
       IMAGE_NAME: << pipeline.parameters.image-name >>
-    docker: # Each job requires specifying an executor
-    # (either docker, macos, or machine), see
+    docker: 
       - image: cimg/base:<< pipeline.parameters.cimg-tag >>
         auth:
+          # Add to Environment Variables your DockerHub Username and Password
+          # Or set up credential management in Docker Hub (recommended)
           username: $DOCKERHUB_USERNAME
           password: $DOCKERHUB_PASSWORD
-# Define a job to be invoked later in a workflow.
-# See: https://circleci.com/docs/2.0/configuration-reference/#jobs
+
 jobs:
-  publishLatestToHub: 
-    executor: docker-publisher
- 
+  buildAndPushContainerImage: 
+    executor: docker-publisher 
     steps: 
       - checkout
       - setup_remote_docker
@@ -46,12 +47,12 @@ jobs:
             docker build -t << pipeline.parameters.image-name >> .
             docker push << pipeline.parameters.image-name >>
 
-  scan:
+  slimScanAndProfile:
     docker:
       - image: cimg/base:<< pipeline.parameters.cimg-tag >>
     steps:
       - checkout
-      # Run your orb's commands to validate them.
+      # Run "Xray" profile on image
       - slim-ai-test-orb/xray:
           imageName: << pipeline.parameters.image-name >>
           imageConnector: << pipeline.parameters.image-connector >>
@@ -59,6 +60,7 @@ jobs:
       - store_artifacts:
           path: /tmp/artifact-xray
           destination: xray-json
+      # Run Slim Vulnerability Report on image
       - slim-ai-test-orb/vscan:
           imageName: << pipeline.parameters.image-name >>
           imageConnector: << pipeline.parameters.image-connector >>
@@ -66,17 +68,15 @@ jobs:
       - store_artifacts:
           path: /tmp/artifact-vscan
           destination: vscan-json
+      # Generate Readme.html summary of information with links to image on Slim Platform
       - store_artifacts:
           path: /tmp/artifact-readme
           destination: readme.html
 
-# Invoke jobs via workflows
-# See: https://circleci.com/docs/2.0/configuration-reference/#workflows
 workflows:
   engine-execution:
     jobs:
-      # Make sure to include "filters: *filters" in every test job you want to run as part of your deployment.
-      - publishLatestToHub
-      - scan:
+      - buildAndPushContainerImage
+      - slimScanAndProfile:
           requires:
-            - publishLatestToHub
+            - buildAndPushContainerImage
